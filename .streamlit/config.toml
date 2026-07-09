@@ -1,0 +1,10 @@
+# 청아연의원 브랜드 테마 — 고객 폰의 다크모드 설정과 무관하게 항상 이 테마로 표시
+[theme]
+base = "light"
+primaryColor = "#1B6B5A"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F3F7F6"
+textColor = "#1F2937"
+
+[server]
+maxUploadSize = 20

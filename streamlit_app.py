@@ -28,6 +28,12 @@ div[data-testid="stMetric"] { background: var(--teal-pale); border-radius: 12px;
 .lesion-medium { border-left: 4px solid #E8A23D; background: #FFF6E8; color: #4A3A16; padding: 12px 14px; border-radius: 8px; margin-bottom: 8px; }
 .lesion-low { border-left: 4px solid #8AA8A0; background: #F3F7F6; color: #253531; padding: 12px 14px; border-radius: 8px; margin-bottom: 8px; }
 .lesion-high b, .lesion-medium b, .lesion-low b { color: inherit; }
+/* 인사말/마무리 말풍선 — 제목이 아닌 본문 크기로 */
+.greeting-box {
+  background: var(--teal-pale); color: #1F3B33;
+  padding: 16px 18px; border-radius: 14px; margin: 4px 0 14px 0;
+  font-size: 15px; line-height: 1.8;
+}
 /* 리뷰 유도 배너 */
 .review-banner {
   background: var(--teal-pale); border: 2px solid var(--teal); color: #14453A;
@@ -202,7 +208,9 @@ def render_baumann(bdata: dict):
 
 def render_results(result: dict, bdata: dict = None):
     st.divider()
-    st.markdown(f"### 💬 {result.get('greeting', '')}")
+    greeting = result.get("greeting", "")
+    if greeting:
+        st.markdown(f"<div class='greeting-box'>💬 {greeting}</div>", unsafe_allow_html=True)
     if result.get("photo_quality_note"):
         st.warning(result["photo_quality_note"])
 

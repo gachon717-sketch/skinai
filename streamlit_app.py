@@ -7,11 +7,25 @@ import streamlit as st
 import auth
 import baumann
 import prompts
+import sheets_log
 import stats
 from gemini_client import analyze_skin, make_client, prepare_image_bytes
 from secrets_util import get_secret, secrets_file_missing
 
-st.set_page_config(page_title="청아연의원 AI 피부 분석", page_icon="✨", layout="centered")
+# ── 모드: "clinic"(병원 내 QR, 기본값) / "external"(SNS 공개용) ──
+MODE = get_secret("MODE", "clinic")
+IS_EXTERNAL = MODE == "external"
+DAILY_LIMIT = int(get_secret("DAILY_LIMIT", "200"))
+
+PAGE_TITLE = "AI 피부 타입 테스트 by 청아연의원" if IS_EXTERNAL else "청아연의원 AI 피부 분석"
+st.set_page_config(page_title=PAGE_TITLE, page_icon="🧬" if IS_EXTERNAL else "✨", layout="centered")
+
+
+def get_src() -> str:
+    """유입경로 (?src=youtube 등). 세션에 고정해 rerun에도 유지."""
+    if "src" not in st.session_state:
+        st.session_state["src"] = st.query_params.get("src", "")
+    return st.session_state["src"]
 
 CUSTOM_CSS = """
 <style>
@@ -69,13 +83,30 @@ def render_admin_panel():
                     s = stats.get_stats()
                     total_a = s.get("analyses", 0)
                     total_r = s.get("review_clicks", 0)
+                    total_k = s.get("kakao_clicks", 0)
                     rate = f"{total_r / total_a * 100:.0f}%" if total_a else "-"
-                    c1, c2 = st.columns(2)
+                    c1, c2, c3 = st.columns(3)
                     c1.metric("총 분석", f"{total_a}회")
                     c2.metric("리뷰 클릭", f"{total_r}회")
+                    c3.metric("카톡 클릭", f"{total_k}회")
                     st.caption(f"리뷰 전환율: {rate}")
                     today = stats.today_stats()
-                    st.caption(f"오늘: 분석 {today.get('analyses', 0)}회 · 리뷰 클릭 {today.get('review_clicks', 0)}회")
+                    today_line = f"오늘: 분석 {today.get('analyses', 0)}회 · 리뷰 {today.get('review_clicks', 0)} · 카톡 {today.get('kakao_clicks', 0)}"
+                    if IS_EXTERNAL:
+                        today_line += f" (일일 상한 {DAILY_LIMIT}회)"
+                    st.caption(today_line)
+                    by_src = s.get("by_src", {})
+                    if by_src:
+                        st.markdown("**유입경로별**")
+                        for src_name, counts in by_src.items():
+                            st.caption(
+                                f"· {src_name}: 분석 {counts.get('analyses', 0)} · "
+                                f"카톡 {counts.get('kakao_clicks', 0)} · 리뷰 {counts.get('review_clicks', 0)}"
+                            )
+                    if sheets_log.enabled():
+                        st.caption("🗂 구글 시트 기록: 연결됨")
+                    else:
+                        st.caption("🗂 구글 시트 기록: 미설정 (서버 재시작 시 위 숫자는 초기화될 수 있음)")
                 else:
                     st.error("관리자 코드가 올바르지 않습니다.")
 
@@ -219,7 +250,8 @@ def render_results(result: dict, bdata: dict = None):
 
     render_baumann(bdata)
 
-    st.markdown("### 🔍 확인되는 피부 병변")
+    lesion_title = "### 🔍 사진에서 참고할 만한 피부 특징" if IS_EXTERNAL else "### 🔍 확인되는 피부 병변"
+    st.markdown(lesion_title)
     render_lesions(result.get("detected_lesions", []))
 
     st.markdown("### 💉 추천 시술")
@@ -236,15 +268,25 @@ def render_results(result: dict, bdata: dict = None):
         st.markdown("---")
         st.markdown(f"*{result['closing_message']}*")
 
-    # 리뷰 유도 — 마무리 인사 직후, 감정이 따뜻할 때 배치
-    st.markdown(
-        "<div class='review-banner'>💚 <b>오늘 분석, 어떠셨나요?</b><br>"
-        "재미있게 보셨다면 리뷰 한 줄 남겨주세요. 원장님과 직원들에게 정말 큰 힘이 됩니다 🙏<br>"
-        "<span style='font-size:13px;'>30초면 충분해요!</span></div>",
-        unsafe_allow_html=True,
-    )
-    # 클릭 집계를 위해 앱 내부 경로(?review=go)를 거쳐 네이버로 이동
-    st.link_button("⭐ 네이버 리뷰 남기러 가기 (클릭!)", "?review=go", type="primary", use_container_width=True)
+    # CTA — 마무리 인사 직후, 감정이 따뜻할 때 배치 (클릭 집계를 위해 내부 경로 경유)
+    src = get_src()
+    if IS_EXTERNAL:
+        st.markdown(
+            "<div class='review-banner'>💬 <b>내 피부, 더 자세히 알고 싶다면?</b><br>"
+            "궁금한 점을 카카오톡으로 물어보세요. 청아연의원이 친절하게 안내해드릴게요 😊</div>",
+            unsafe_allow_html=True,
+        )
+        st.link_button("💬 카카오톡으로 상담 문의하기", f"?kakao=go&src={src}", type="primary", use_container_width=True)
+        st.caption("분석 결과는 익명 통계로 활용될 수 있습니다. 이름·연락처·사진은 저장되지 않아요.")
+    else:
+        st.markdown(
+            "<div class='review-banner'>💚 <b>오늘 분석, 어떠셨나요?</b><br>"
+            "재미있게 보셨다면 리뷰 한 줄 남겨주세요. 원장님과 직원들에게 정말 큰 힘이 됩니다 🙏<br>"
+            "<span style='font-size:13px;'>30초면 충분해요!</span></div>",
+            unsafe_allow_html=True,
+        )
+        st.link_button("⭐ 네이버 리뷰 남기러 가기 (클릭!)", f"?review=go&src={src}", type="primary", use_container_width=True)
+        st.link_button("💬 카카오톡으로 예약·상담 문의하기", f"?kakao=go&src={src}", use_container_width=True)
 
     st.caption(prompts.DISCLAIMER)
 
@@ -254,42 +296,67 @@ def render_results(result: dict, bdata: dict = None):
         st.rerun()
 
 
+def _redirect_out(url: str, label: str):
+    """클릭 집계 후 외부 페이지로 자동 이동시키는 공용 처리."""
+    st.markdown(f"{label} 페이지로 이동 중입니다... 자동으로 이동하지 않으면 [여기를 눌러주세요]({url}) 🙏")
+    import streamlit.components.v1 as components
+    # 컴포넌트 iframe은 top 네비게이션이 차단되므로, 같은 출처인 부모 문서에
+    # 앵커를 만들어 클릭시키는 방식으로 이동시킨다.
+    components.html(
+        f"""<script>
+        try {{
+            var d = window.parent.document;
+            var a = d.createElement('a');
+            a.href = "{url}";
+            a.target = "_self";
+            d.body.appendChild(a);
+            a.click();
+        }} catch (e) {{
+            window.open("{url}", "_blank");
+        }}
+        </script>""",
+        height=0,
+    )
+    st.stop()
+
+
 def main():
-    # 리뷰 버튼 클릭 집계 후 네이버로 자동 이동 (로그인 불필요 — 나가는 길목이므로)
+    src = st.query_params.get("src", "")
+
+    # 리뷰/카톡 버튼 클릭 집계 후 자동 이동 (로그인 불필요 — 나가는 길목이므로)
     if st.query_params.get("review") == "go":
-        stats.increment("review_clicks")
-        st.markdown(f"⭐ 네이버 리뷰 페이지로 이동 중입니다... 자동으로 이동하지 않으면 [여기를 눌러주세요]({prompts.NAVER_REVIEW_URL}) 🙏")
-        import streamlit.components.v1 as components
-        # 컴포넌트 iframe은 top 네비게이션이 차단되므로, 같은 출처인 부모 문서에
-        # 앵커를 만들어 클릭시키는 방식으로 이동시킨다.
-        components.html(
-            f"""<script>
-            try {{
-                var d = window.parent.document;
-                var a = d.createElement('a');
-                a.href = "{prompts.NAVER_REVIEW_URL}";
-                a.target = "_self";
-                d.body.appendChild(a);
-                a.click();
-            }} catch (e) {{
-                window.open("{prompts.NAVER_REVIEW_URL}", "_blank");
-            }}
-            </script>""",
-            height=0,
-        )
-        st.stop()
+        stats.increment("review_clicks", src=src)
+        sheets_log.log_click("review", src)
+        _redirect_out(prompts.NAVER_REVIEW_URL, "⭐ 네이버 리뷰")
+
+    if st.query_params.get("kakao") == "go":
+        stats.increment("kakao_clicks", src=src)
+        sheets_log.log_click("kakao", src)
+        _redirect_out(prompts.KAKAO_CHANNEL_URL, "💬 카카오톡 상담")
 
     render_admin_panel()
 
-    if not require_password():
-        st.stop()
+    # 외부 공개 버전은 비밀번호 없이 바로 사용 (일일 상한선으로 비용 방어)
+    if not IS_EXTERNAL:
+        if not require_password():
+            st.stop()
 
-    st.markdown(
-        "<div class='hero-banner'><h2 style='color:#fff;margin:0 0 6px 0;'>✨ 청아연의원 AI 피부 분석</h2>"
-        "스마트폰으로 촬영한 얼굴 사진으로 피부 상태를 분석해드립니다. 정면 사진은 필수이며, "
-        "측면 사진을 추가하면 정확도가 올라갑니다.</div>",
-        unsafe_allow_html=True,
-    )
+    _ = get_src()  # 유입경로를 세션에 고정
+
+    if IS_EXTERNAL:
+        st.markdown(
+            "<div class='hero-banner'><h2 style='color:#fff;margin:0 0 6px 0;'>🧬 재미로 보는 AI 피부 타입 테스트</h2>"
+            "셀카 한 장이면 AI가 피부 타입과 맞춤 관리 팁을 알려드려요. "
+            "청아연의원이 준비한 무료 테스트입니다.</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(
+            "<div class='hero-banner'><h2 style='color:#fff;margin:0 0 6px 0;'>✨ 청아연의원 AI 피부 분석</h2>"
+            "스마트폰으로 촬영한 얼굴 사진으로 피부 상태를 분석해드립니다. 정면 사진은 필수이며, "
+            "측면 사진을 추가하면 정확도가 올라갑니다.</div>",
+            unsafe_allow_html=True,
+        )
 
     # 데모 모드: 로그인 후 주소 뒤에 ?demo=1 을 붙이면 샘플 결과 화면 표시 (디자인 확인/직원 교육용)
     if st.query_params.get("demo") == "1":
@@ -319,7 +386,10 @@ def main():
         st.markdown("#### 📝 2단계 — 기본 정보 (선택)")
         col1, col2 = st.columns(2)
         with col1:
-            name = st.text_input("이름 (선택)")
+            if IS_EXTERNAL:
+                name = ""  # 외부 버전은 익명 — 이름을 받지 않음
+            else:
+                name = st.text_input("이름 (선택)")
             gender = st.segmented_control("성별", ["여", "남"], key="gender_seg")
         with col2:
             age = st.number_input("나이 (선택)", min_value=0, max_value=120, value=0, step=1)
@@ -347,6 +417,15 @@ def main():
             st.error("정면 사진은 필수입니다. 위의 1단계에서 사진을 촬영하거나 선택해주세요.")
             return
 
+        # 외부 공개 버전: 일일 분석 상한 (비용 방어)
+        if IS_EXTERNAL and stats.analyses_today() >= DAILY_LIMIT:
+            st.warning(
+                "🙏 오늘 준비된 무료 분석이 모두 소진되었어요! 내일 다시 찾아와주세요.\n\n"
+                "궁금한 점은 카카오톡 채널로 문의하시면 빠르게 안내드릴게요."
+            )
+            st.link_button("💬 카카오톡으로 문의하기", f"?kakao=go&src={get_src()}", type="primary", use_container_width=True)
+            return
+
         loading_box = st.empty()
         loading_box.info("📷 사진을 준비하고 있어요...")
 
@@ -363,7 +442,7 @@ def main():
         baumann_text = baumann.build_prompt_text(bdata_pre)
 
         system_prompt = prompts.build_system_prompt(
-            gender_code, int(age), notes, cosmetics_list, baumann_text=baumann_text
+            gender_code, int(age), notes, cosmetics_list, baumann_text=baumann_text, external=IS_EXTERNAL
         )
         model_name = get_secret("GEMINI_MODEL", "gemini-2.5-pro")
 
@@ -386,8 +465,13 @@ def main():
                 result = future.result()
 
             loading_box.empty()
-            stats.increment("analyses")
+            stats.increment("analyses", src=get_src())
             bdata_final = baumann.calc_baumann(gender_code, baumann_answers, skin_scores=result.get("skin_scores"))
+            sheets_log.log_analysis(
+                mode=MODE, src=get_src(), gender=gender_code, age=int(age),
+                baumann_code=(bdata_final or {}).get("code", ""),
+                scores=result.get("skin_scores", {}), notes=notes, result=result,
+            )
             st.session_state["result"] = result
             st.session_state["baumann"] = bdata_final
             st.rerun()

@@ -22,19 +22,28 @@ def _load() -> dict:
         return dict(_EMPTY)
 
 
-def increment(key: str):
-    """key: 'analyses' 또는 'review_clicks'"""
+def increment(key: str, src: str = ""):
+    """key: 'analyses' | 'review_clicks' | 'kakao_clicks'. src: 유입경로(youtube/insta 등)"""
     with _lock:
         data = _load()
         data[key] = data.get(key, 0) + 1
         today = datetime.date.today().isoformat()
         day = data.setdefault("daily", {}).setdefault(today, {})
         day[key] = day.get(key, 0) + 1
+        if src:
+            by_src = data.setdefault("by_src", {}).setdefault(src, {})
+            by_src[key] = by_src.get(key, 0) + 1
         try:
             with open(STATS_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=1)
         except Exception:
             pass  # 통계 기록 실패가 앱 동작을 막으면 안 됨
+
+
+def analyses_today() -> int:
+    data = _load()
+    today = datetime.date.today().isoformat()
+    return data.get("daily", {}).get(today, {}).get("analyses", 0)
 
 
 def get_stats() -> dict:

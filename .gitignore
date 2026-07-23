@@ -8,10 +8,14 @@ skin_prescription.html
 run.bat
 run_streamlit.bat
 
-# 로컬 전용
+# 로컬 전용 (민감·개인 파일 — 공개 저장소 업로드 금지)
 .claude/
 *QR*.png
 *QR*.jpg
+*QR*.pdf
+*.pdf
+*.pptx
+관리자코드.txt
 __pycache__/
 *.pyc
 .venv/

@@ -70,7 +70,52 @@ secrets.toml을 아직 채우지 않았어도 앱이 죽지 않고, 사이드바
 - 설문은 선택 사항이며, 답변하면 사진 AI 분석과 결합해 바우만 코드(예: OSPW)·타입명·속건조 여부·축별 그래프를 결과 화면에 보여줍니다.
 - 설문 결과는 AI 분석 요청 전에 시스템 프롬프트에도 포함되어, 화장품 성분/시술 추천에 반영됩니다.
 
+## 병원용(clinic) / SNS 공개용(external) 두 가지 모드
+같은 코드·같은 GitHub 저장소로 앱을 **두 개** 배포해 용도를 나눈다. secrets의 `MODE` 값만 다르다.
+
+| | 병원용 (clinic) | SNS 공개용 (external) |
+|---|---|---|
+| `MODE` | `clinic` (또는 생략) | `external` |
+| 접속 비밀번호 | 필요 (2주 자동 갱신) | 없음 (누구나 바로) |
+| 이름 입력 | 받음 | 안 받음 (익명) |
+| 마무리 버튼 | 네이버 리뷰(주) + 카톡(보조) | 카카오 상담(주) |
+| 일일 분석 상한 | 없음 | `DAILY_LIMIT`회 (기본 200) |
+| 문구 톤 | 병원 내원 고객 | "재미로 보는 테스트"(의료광고 안전 톤) |
+
+- **MODE를 아예 넣지 않으면 무조건 clinic** 으로 동작 → 기존 병원용 앱은 건드릴 필요 없음.
+- 두 번째(external) 앱 배포: share.streamlit.io에서 같은 저장소로 New app을 하나 더 만들고,
+  App URL만 다르게(예: `greenayeonskin-test`) 지정한 뒤 Secrets에 `MODE = "external"` 추가.
+
+### 유입경로(SNS 채널) 추적
+external 앱 주소 뒤에 `?src=` 를 붙여 채널별 링크를 만든다. 예:
+- 유튜브: `https://<external앱>.streamlit.app/?src=youtube`
+- 인스타: `https://<external앱>.streamlit.app/?src=insta`
+
+채널별 분석/카톡클릭 수가 관리자 패널과 구글 시트에 따로 집계된다.
+
+## 구글 시트 데이터 축적 (선택 — 익명 통계)
+분석 결과(성별·연령대·바우만타입·점수·고민·추천시술)와 버튼 클릭을 익명으로 구글 시트에 자동 저장.
+이름·연락처·사진은 저장하지 않는다. Apps Script 웹훅 방식이라 서비스 계정/키가 필요 없다.
+
+1. 구글 드라이브에서 새 **구글 스프레드시트** 생성.
+2. 상단 메뉴 **확장 프로그램 → Apps Script**.
+3. 아래 코드를 붙여넣고 저장:
+   ```javascript
+   function doPost(e) {
+     var ss = SpreadsheetApp.getActiveSpreadsheet();
+     var data = JSON.parse(e.postData.contents);
+     var sheet = ss.getSheetByName(data.sheet) || ss.insertSheet(data.sheet);
+     sheet.appendRow(data.row);
+     return ContentService.createTextOutput("ok");
+   }
+   ```
+4. 우측 상단 **배포 → 새 배포 → 유형: 웹 앱** → 액세스 권한 **"모든 사용자"** → 배포.
+5. 나오는 **웹 앱 URL**(`https://script.google.com/macros/s/.../exec`)을 복사.
+6. Streamlit Cloud Secrets에 `GSHEET_WEBHOOK_URL = "복사한 URL"` 추가.
+
+미설정 시 앱은 그대로 동작하며 데이터만 안 쌓인다.
+
 ## 주의 / 참고
 - 피부 병변 관련 소견은 참고용 관찰이며 의학적 진단이 아닙니다. 화면 하단에 항상 면책 문구가 표시됩니다.
 - 이미지는 전송 전 리사이즈/압축되어 업로드 용량과 API 비용을 줄입니다.
-- 마지막에는 네이버 리뷰 페이지로 이동하는 버튼이 항상 노출됩니다.
+- clinic 모드는 네이버 리뷰 버튼, external 모드는 카카오 상담 버튼이 마무리에 노출됩니다.

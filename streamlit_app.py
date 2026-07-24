@@ -229,6 +229,11 @@ def render_baumann(bdata: dict):
     st.markdown("### 🧬 바우만 피부 타입")
     inner_dry_badge = " · 💧 속건조 경향 감지됨" if bdata["inner_dry"] else ""
     st.markdown(f"**{bdata['code']}** — {bdata['type_name']}{inner_dry_badge}")
+    plain = baumann.plain_explanation(bdata)
+    st.caption(
+        f"ℹ️ 바우만 타입은 피부를 4가지 기준(유·수분 / 민감도 / 색소 / 탄력)으로 나눈 피부 분류법이에요. "
+        f"회원님은 **{plain}** 경향으로 나왔어요."
+    )
     for axis in bdata["axes"]:
         value = axis["pole_left"] if axis["is_left"] else axis["pole_right"]
         st.write(f"{axis['label']} — **{value}**")

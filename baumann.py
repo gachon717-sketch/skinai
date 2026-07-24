@@ -105,6 +105,19 @@ def calc_baumann(gender: str, answers: dict, skin_scores: Optional[dict] = None)
     }
 
 
+def plain_explanation(bdata: Optional[dict]) -> str:
+    """4글자 코드를 사람이 이해하기 쉬운 우리말 한 줄로 풀어준다."""
+    if not bdata:
+        return ""
+    parts = [
+        "지성" if bdata["oily"] else "건성",
+        "민감성" if bdata["sens"] else "저항성",
+        "색소" if bdata["pig"] else "비색소",
+        "주름형" if bdata["wri"] else "탄력형",
+    ]
+    return "·".join(parts)
+
+
 def build_prompt_text(bdata: Optional[dict]) -> str:
     """분석 요청 전 시스템 프롬프트에 삽입할 주관식 설문 결과 텍스트."""
     if not bdata:

@@ -58,9 +58,6 @@ div[data-testid="stMetric"] { background: var(--teal-pale); border-radius: 12px;
 }
 </style>
 """
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-
-
 def render_admin_panel():
     with st.sidebar:
         with st.expander("🔑 병원 관리자용"):
@@ -323,6 +320,10 @@ def _redirect_out(url: str, label: str):
 
 
 def main():
+    # CSS는 매 rerun마다 다시 주입해야 한다.
+    # (external_app.py가 이 모듈을 import 하는 구조라, 모듈 최상단에 두면 첫 실행 때 한 번만 적용됨)
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
     src = st.query_params.get("src", "")
 
     # 리뷰/카톡 버튼 클릭 집계 후 자동 이동 (로그인 불필요 — 나가는 길목이므로)
@@ -347,9 +348,11 @@ def main():
 
     if IS_EXTERNAL:
         st.markdown(
-            "<div class='hero-banner'><h2 style='color:#fff;margin:0 0 6px 0;'>🧬 재미로 보는 AI 피부 타입 테스트</h2>"
+            "<div class='hero-banner'>"
+            "<div style='font-size:13px;letter-spacing:1px;opacity:0.85;margin-bottom:4px;'>청아연의원</div>"
+            "<h2 style='color:#fff;margin:0 0 8px 0;'>🧬 AI 피부 타입 테스트</h2>"
             "셀카 한 장이면 AI가 피부 타입과 맞춤 관리 팁을 알려드려요. "
-            "청아연의원이 준비한 무료 테스트입니다.</div>",
+            "재미로 보는 무료 테스트입니다.</div>",
             unsafe_allow_html=True,
         )
     else:

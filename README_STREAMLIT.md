@@ -139,9 +139,8 @@ external 앱 주소 뒤에 `?src=` 를 붙여 채널별 링크를 만든다. 예
    function countToday(sheet, today) {
      var values = sheet.getDataRange().getValues();
      var n = 0;
-     for (var i = 1; i < values.length; i++) {           // 0행은 헤더
-       var t = String(values[i][0]);                      // 1열: 시각 "YYYY-MM-DD HH:MM:SS"
-       if (t.indexOf(today) === 0) n++;
+     for (var i = 0; i < values.length; i++) {           // 1열(시각)이 오늘 날짜로 시작하는 행만 카운트
+       if (String(values[i][0]).indexOf(today) === 0) n++;
      }
      return n;
    }

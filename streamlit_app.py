@@ -423,7 +423,13 @@ def main():
             return
 
         # 외부 공개 버전: 일일 분석 상한 (비용 방어)
-        if IS_EXTERNAL and stats.analyses_today() >= DAILY_LIMIT:
+        # 구글 시트 카운터를 우선 사용(서버 재시작에도 유지), 조회 실패 시 로컬 카운터로 폴백
+        if IS_EXTERNAL:
+            sheet_count = sheets_log.get_today_count()
+            today_count = sheet_count if sheet_count >= 0 else stats.analyses_today()
+        else:
+            today_count = 0
+        if IS_EXTERNAL and today_count >= DAILY_LIMIT:
             st.warning(
                 "🙏 오늘 준비된 무료 분석이 모두 소진되었어요! 내일 다시 찾아와주세요.\n\n"
                 "궁금한 점은 카카오톡 채널로 문의하시면 빠르게 안내드릴게요."

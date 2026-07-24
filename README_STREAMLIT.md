@@ -99,21 +99,70 @@ external 앱 주소 뒤에 `?src=` 를 붙여 채널별 링크를 만든다. 예
 
 1. 구글 드라이브에서 새 **구글 스프레드시트** 생성.
 2. 상단 메뉴 **확장 프로그램 → Apps Script**.
-3. 아래 코드를 붙여넣고 저장:
+3. 아래 코드를 붙여넣고 저장 (맨 위 두 값만 원하는 대로 수정):
    ```javascript
+   // ▼ 여기 두 줄만 병원 상황에 맞게 수정 ▼
+   var ALERT_EMAIL = "gachon717@gmail.com";  // 알림 받을 이메일
+   var ALERT_THRESHOLD = 200;                 // 하루 분석 몇 회 도달 시 알림
+
    function doPost(e) {
      var ss = SpreadsheetApp.getActiveSpreadsheet();
      var data = JSON.parse(e.postData.contents);
      var sheet = ss.getSheetByName(data.sheet) || ss.insertSheet(data.sheet);
      sheet.appendRow(data.row);
+
+     // 분석 기록이면, 오늘 건수가 임계치에 '도달하는 순간' 1회만 이메일 발송
+     if (data.sheet === "analyses") {
+       var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+       var count = countToday(sheet, today);
+       if (count === ALERT_THRESHOLD) {
+         MailApp.sendEmail(ALERT_EMAIL,
+           "[SkinAI] 오늘 무료 분석 " + ALERT_THRESHOLD + "회 도달",
+           "외부 공개용 앱의 오늘 분석이 " + ALERT_THRESHOLD + "회에 도달했습니다.\n" +
+           "이후 접속자는 '오늘 분량 마감' 안내를 보게 됩니다.\n" +
+           "상한을 늘리려면 Streamlit Secrets의 DAILY_LIMIT 값을 조정하세요.");
+       }
+     }
      return ContentService.createTextOutput("ok");
    }
+
+   // 앱이 오늘 분석 건수를 물어볼 때 (서버 재시작에도 유지되는 카운터)
+   function doGet(e) {
+     if (e.parameter.count === "analyses") {
+       var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("analyses");
+       var n = sheet ? countToday(sheet, e.parameter.date) : 0;
+       return ContentService.createTextOutput(String(n));
+     }
+     return ContentService.createTextOutput("0");
+   }
+
+   function countToday(sheet, today) {
+     var values = sheet.getDataRange().getValues();
+     var n = 0;
+     for (var i = 1; i < values.length; i++) {           // 0행은 헤더
+       var t = String(values[i][0]);                      // 1열: 시각 "YYYY-MM-DD HH:MM:SS"
+       if (t.indexOf(today) === 0) n++;
+     }
+     return n;
+   }
    ```
-4. 우측 상단 **배포 → 새 배포 → 유형: 웹 앱** → 액세스 권한 **"모든 사용자"** → 배포.
+4. 우측 상단 **배포 → 새 배포 → 유형: 웹 앱** → 실행 계정 **"나"**, 액세스 권한 **"모든 사용자"** → 배포.
+   (첫 배포 시 권한 승인 창이 뜨면 본인 구글 계정으로 허용 — 이메일 발송 권한 포함)
 5. 나오는 **웹 앱 URL**(`https://script.google.com/macros/s/.../exec`)을 복사.
-6. Streamlit Cloud Secrets에 `GSHEET_WEBHOOK_URL = "복사한 URL"` 추가.
+6. **두 앱 모두**의 Streamlit Cloud Secrets에 `GSHEET_WEBHOOK_URL = "복사한 URL"` 추가.
 
 미설정 시 앱은 그대로 동작하며 데이터만 안 쌓인다.
+
+### 이렇게 하면 생기는 안전장치 (3겹)
+1. **구글 클라우드 예산 알림** — 월 지출이 50만원의 50/80/100%에 도달하면 이메일 (돈 기준 최종 백스톱, 이미 설정됨).
+2. **하루 200회 도달 이메일** — 위 Apps Script가 그날 200번째 분석 순간 자동 발송.
+3. **튼튼한 일일 상한** — external 앱은 매 분석 전에 시트의 오늘 건수를 확인하므로, 서버가 재시작돼도 상한이 초기화되지 않음 (시트 미연결 시에만 로컬 카운터로 폴백).
+
+### 수동으로 조절하는 법
+- **상한 늘리기/줄이기**: Streamlit Cloud → 해당 앱 → Settings → Secrets 에서 `DAILY_LIMIT` 값을 수정 (약 1분 뒤 반영). 예: `DAILY_LIMIT = "300"`.
+- **완전히 잠그기**: `DAILY_LIMIT = "0"` 으로 두면 모든 접속자가 '오늘 분량 마감' 안내를 보게 됨 (분석 중단).
+- **알림 기준 변경**: Apps Script 맨 위 `ALERT_THRESHOLD` 값 수정 후 다시 배포.
+- **앱 자체 끄기**: Streamlit Cloud 대시보드에서 해당 앱 우측 ⋮ → Reboot/Delete.
 
 ## 주의 / 참고
 - 피부 병변 관련 소견은 참고용 관찰이며 의학적 진단이 아닙니다. 화면 하단에 항상 면책 문구가 표시됩니다.

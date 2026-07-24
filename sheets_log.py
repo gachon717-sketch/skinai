@@ -35,6 +35,21 @@ def _post(payload: dict):
         pass  # 기록 실패는 조용히 무시 — 고객 화면에 영향 금지
 
 
+def get_today_count() -> int:
+    """구글 시트에 기록된 오늘 분석 건수를 조회 (서버 재시작에도 유지되는 튼튼한 카운터).
+    조회 실패 시 -1 반환 → 호출부에서 로컬 카운터로 폴백."""
+    url = get_secret("GSHEET_WEBHOOK_URL")
+    if not url:
+        return -1
+    try:
+        today = datetime.date.today().isoformat()
+        q = f"{url}?count=analyses&date={today}"
+        with urllib.request.urlopen(q, timeout=8) as r:
+            return int(r.read().decode().strip())
+    except Exception:
+        return -1
+
+
 def _age_band(age: int) -> str:
     if not age or age <= 0:
         return ""

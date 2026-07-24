@@ -138,9 +138,14 @@ external 앱 주소 뒤에 `?src=` 를 붙여 채널별 링크를 만든다. 예
 
    function countToday(sheet, today) {
      var values = sheet.getDataRange().getValues();
+     var tz = Session.getScriptTimeZone();
      var n = 0;
-     for (var i = 0; i < values.length; i++) {           // 1열(시각)이 오늘 날짜로 시작하는 행만 카운트
-       if (String(values[i][0]).indexOf(today) === 0) n++;
+     for (var i = 0; i < values.length; i++) {
+       var v = values[i][0];                              // 1열: 시각
+       // 구글 시트가 문자열을 날짜형 셀로 자동 변환하는 경우까지 대응
+       var s = (v instanceof Date) ? Utilities.formatDate(v, tz, "yyyy-MM-dd")
+                                   : String(v).substring(0, 10);
+       if (s === today) n++;
      }
      return n;
    }

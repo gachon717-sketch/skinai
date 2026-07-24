@@ -1,5 +1,6 @@
 """청아연의원 AI 피부 분석 — 대중용 (스마트폰 카메라 업로드, Streamlit Cloud 배포)"""
 import concurrent.futures
+import os
 import time
 
 import streamlit as st
@@ -13,7 +14,8 @@ from gemini_client import analyze_skin, make_client, prepare_image_bytes
 from secrets_util import get_secret, secrets_file_missing
 
 # ── 모드: "clinic"(병원 내 QR, 기본값) / "external"(SNS 공개용) ──
-MODE = get_secret("MODE", "clinic")
+# 우선순위: 진입 파일이 지정한 값(external_app.py) > secrets의 MODE > 기본값 clinic
+MODE = os.environ.get("SKINAI_MODE") or get_secret("MODE", "clinic")
 IS_EXTERNAL = MODE == "external"
 DAILY_LIMIT = int(get_secret("DAILY_LIMIT", "200"))
 

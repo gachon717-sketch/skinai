@@ -105,16 +105,23 @@ external 앱 주소 뒤에 `?src=` 를 붙여 채널별 링크를 만든다. 예
    var ALERT_EMAIL = "gachon717@gmail.com";  // 알림 받을 이메일
    var ALERT_THRESHOLD = 200;                 // 하루 분석 몇 회 도달 시 알림
 
+   // 오늘(스크립트 시간대 기준) 키 — 날짜 파싱/시간대 문제를 피하려고 자체 카운터 사용
+   function todayKey() {
+     return "count_" + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
+   }
+
    function doPost(e) {
      var ss = SpreadsheetApp.getActiveSpreadsheet();
      var data = JSON.parse(e.postData.contents);
      var sheet = ss.getSheetByName(data.sheet) || ss.insertSheet(data.sheet);
      sheet.appendRow(data.row);
 
-     // 분석 기록이면, 오늘 건수가 임계치에 '도달하는 순간' 1회만 이메일 발송
+     // 분석 기록이면 자체 카운터를 1 증가, 임계치 '도달 순간'에 1회만 이메일
      if (data.sheet === "analyses") {
-       var today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "yyyy-MM-dd");
-       var count = countToday(sheet, today);
+       var props = PropertiesService.getScriptProperties();
+       var key = todayKey();
+       var count = (parseInt(props.getProperty(key), 10) || 0) + 1;
+       props.setProperty(key, String(count));
        if (count === ALERT_THRESHOLD) {
          MailApp.sendEmail(ALERT_EMAIL,
            "[SkinAI] 오늘 무료 분석 " + ALERT_THRESHOLD + "회 도달",
@@ -129,25 +136,10 @@ external 앱 주소 뒤에 `?src=` 를 붙여 채널별 링크를 만든다. 예
    // 앱이 오늘 분석 건수를 물어볼 때 (서버 재시작에도 유지되는 카운터)
    function doGet(e) {
      if (e.parameter.count === "analyses") {
-       var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("analyses");
-       var n = sheet ? countToday(sheet, e.parameter.date) : 0;
-       return ContentService.createTextOutput(String(n));
+       var props = PropertiesService.getScriptProperties();
+       return ContentService.createTextOutput(props.getProperty(todayKey()) || "0");
      }
      return ContentService.createTextOutput("0");
-   }
-
-   function countToday(sheet, today) {
-     var values = sheet.getDataRange().getValues();
-     var tz = Session.getScriptTimeZone();
-     var n = 0;
-     for (var i = 0; i < values.length; i++) {
-       var v = values[i][0];                              // 1열: 시각
-       // 구글 시트가 문자열을 날짜형 셀로 자동 변환하는 경우까지 대응
-       var s = (v instanceof Date) ? Utilities.formatDate(v, tz, "yyyy-MM-dd")
-                                   : String(v).substring(0, 10);
-       if (s === today) n++;
-     }
-     return n;
    }
    ```
 4. 우측 상단 **배포 → 새 배포 → 유형: 웹 앱** → 실행 계정 **"나"**, 액세스 권한 **"모든 사용자"** → 배포.
